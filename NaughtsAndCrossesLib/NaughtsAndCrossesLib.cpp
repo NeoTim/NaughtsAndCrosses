@@ -3,9 +3,11 @@
 
 #include "stdafx.h"
 #include "NaughtsAndCrossesLib.h"
+#include <vector>
+#include <iterator>
 
 // convert ternary value stored in byte array to short integer value
-NAUGHTSANDCROSSESLIB_API ShortBoard shortBoard(const Board const& board)
+NAUGHTSANDCROSSESLIB_API ShortBoard shortBoard(const Board& board)
 {
 	ShortBoard v, b = 0, pow = 1;
 	for (int j, i = 0; i < 3; ++i) {
@@ -17,6 +19,7 @@ NAUGHTSANDCROSSESLIB_API ShortBoard shortBoard(const Board const& board)
 	}
 	return b;
 }
+
 NAUGHTSANDCROSSESLIB_API ShortBoard shortBoard(Board* board)
 {
 	return shortBoard(*board);
@@ -41,11 +44,12 @@ GameTree::GameTree()
 
 GameTree::~GameTree() {
 	for (auto v : nodemap) {
+		delete[] v.second->successors;
 		delete v.second;
 	}
 }
 
-GameTreeNode * GameTree::getNode(ShortBoard b)
+GameTreeNode* GameTree::getNode(ShortBoard b)
 {
 	return nodemap[b];
 }
@@ -55,19 +59,93 @@ size_t GameTree::size()
 	return nodemap.size();
 }
 
+void GameTree::serialize(const std::string& fileName)
+{
+	std::ofstream fout(fileName, std::ios::binary | std::ios::out);
+	std::set<ShortBoard> visited;
+	start->serialize(fout, visited);
+}
+GameTreeNode* getOrCreateGameTreeNode(ShortBoard b, NodeMap& nodemap) {
+	GameTreeNode* gtn = nodemap[b];
+	if (gtn == NULL) {
+		nodemap[b] = gtn = new GameTreeNode(b);
+	}
+	return gtn;
+}
+
 GameTreeNode::GameTreeNode() : GameTreeNode(0)
 {
 }
 
+unsigned int nodeCount = 0;
+
 GameTreeNode::GameTreeNode(ShortBoard board) 
 	: current(board)
 	, score(UNVISITED)
+	, successorCount(0)
 {
+	nodeCount++;
+}
+
+unsigned int nodesSerialised = 0;
+void GameTreeNode::serialize(std::ostream& os, std::set<ShortBoard>& visited)
+{
+	nodesSerialised++;
+	visited.insert(current);
+	serializeShortBoard(os, current);
+	os << successorCount;
+	for (unsigned char i = 0; i < successorCount; ++i) {
+		serializeShortBoard(os, successors[i]->current);
+	}
+	for (unsigned char i = 0; i < successorCount; ++i) {
+		GameTreeNode* v = successors[i];
+		if (visited.find(v->current) == visited.end()) {
+			v->serialize(os, visited);
+		}
+	}
+}
+
+unsigned int GameTreeNode::deserialize(std::ifstream& is, NodeMap& nodemap)
+{
+	unsigned int bytesRead = 3; // first board and length
+	char x;
+	is.read(&x, 1);
+	successorCount = static_cast<unsigned char>(x);
+	successors = new GameTreeNode*[successorCount];
+	for (unsigned char i = 0; i < successorCount; ++i) {
+		ShortBoard b = deserializeShortBoard(is);
+		GameTreeNode* gtn = getOrCreateGameTreeNode(b, nodemap);
+		successors[i] = gtn;
+		bytesRead += 2;
+	}
+	return bytesRead;
+}
+
+GameTree::GameTree(const std::string & fileName)
+{
+	std::ifstream fin(fileName, std::ios::binary);
+	if (!fin) {
+		throw FileException(fileName);
+	}
+	fin.seekg(0, fin.end);
+	unsigned int length = fin.tellg();
+	fin.seekg(0, fin.beg);
+	unsigned int bytesRead = 0;
+	while (bytesRead < length) {
+		ShortBoard b = deserializeShortBoard(fin);
+		GameTreeNode* gtn = getOrCreateGameTreeNode(b, nodemap);
+		if (b == 0) {
+			start = gtn;
+		}
+		bytesRead += gtn->deserialize(fin, nodemap);
+	}
+	calculateScore(start, XO::O);
 }
 
 inline void countPlayer(int v, XO player, int& count) {
 	if (v == player) ++count;
 }
+
 bool isWin(const Board& b, XO player) {
 	int d1Sum = 0, d2Sum = 0, rowSum, colSum, i, j;
 	for (i = 0; i < 3; ++i) {
@@ -83,6 +161,7 @@ bool isWin(const Board& b, XO player) {
 	if (d1Sum == 3 || d2Sum == 3) return true;
 	return false;
 }
+
 inline bool isFull(const Board& b) {
 	for (int j, i = 0; i < 3; ++i) {
 		for (j = 0; j < 3; ++j) {
@@ -91,7 +170,8 @@ inline bool isFull(const Board& b) {
 	}
 	return true;
 }
-int GameTree::createSuccessors(GameTreeNode* node, XO player)
+
+unsigned char GameTree::createSuccessors(GameTreeNode* node, XO player)
 {
 	Board board = node->current;
 	node->successorCount = 0;
@@ -109,10 +189,7 @@ int GameTree::createSuccessors(GameTreeNode* node, XO player)
 		node->successors = new GameTreeNode*[node->successorCount];
 		for (int i = 0; i < node->successorCount; ++i) {
 			ShortBoard succ = shortBoard(successorBoards[i]);
-			GameTreeNode* gtn = nodemap[succ];
-			if (gtn == NULL) {
-				nodemap[succ] = gtn = new GameTreeNode(succ);
-			}
+			GameTreeNode* gtn = getOrCreateGameTreeNode(succ, nodemap);
 			node->successors[i] = gtn;
 			delete successorBoards[i];
 		}
@@ -124,9 +201,11 @@ int GameTree::createSuccessors(GameTreeNode* node, XO player)
 inline bool endGame(GameTreeNode* node) {
 	return node->successorCount == 0;
 }
+
 inline bool visited(GameTreeNode* node) {
 	return node->score != UNVISITED;
 }
+
 int calculateScore(GameTreeNode *node, XO player)
 {
 	if (visited(node)) {
@@ -149,6 +228,37 @@ int calculateScore(GameTreeNode *node, XO player)
 		}
 	}
 	return node->score = node->successors[node->choice]->score;
+}
+
+NAUGHTSANDCROSSESLIB_API Bytes boardToBytes(ShortBoard board)
+{
+	unsigned char low = board & 0x00FF, high = (board & 0xFF00) >> 8;
+	return { low, high };
+}
+
+NAUGHTSANDCROSSESLIB_API ShortBoard bytesToBoard(Bytes bytes)
+{
+	ShortBoard low, high;
+	std::tie(low, high) = bytes;
+	return (high << 8) | low;
+}
+
+NAUGHTSANDCROSSESLIB_API void serializeShortBoard(std::ostream& os, ShortBoard b)
+{
+	Bytes bytes = boardToBytes(b);
+	os << std::get<0>(bytes) << std::get<1>(bytes);
+}
+
+NAUGHTSANDCROSSESLIB_API ShortBoard deserializeShortBoard(std::ifstream & is)
+{
+	unsigned char low, high;
+	//is >> low >> high;
+	char x;
+	is.read(&x, 1);
+	low = static_cast<unsigned char>(x);
+	is.read(&x, 1);
+	high = static_cast<unsigned char>(x);
+	return bytesToBoard({ low, high });
 }
 
 Board::Board(ShortBoard b)
@@ -182,4 +292,22 @@ bool Board::operator==(Board const & a)
 
 Board::~Board()
 {
+}
+
+FileException::FileException(const std::string & fileName)
+	: std::runtime_error("File not found " + fileName)
+{
+}
+
+GameTree* lazyGameTree() {
+	std::string fileName("GameTree.bin");
+	GameTree* gt;
+	try {
+		gt = new GameTree(fileName);
+	}
+	catch (FileException fe) {
+		gt = new GameTree();
+		gt->serialize(fileName);
+	}
+	return gt;
 }
