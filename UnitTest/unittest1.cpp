@@ -62,6 +62,7 @@ namespace UnitTest
 			GameTree rehydrated("TestGameTree.bin");
 			size_t size = rehydrated.size();
 			Assert::AreEqual(size, (size_t)5478);
+			Assert::IsTrue(*gt.start == *rehydrated.start);
 		}
 	};
 	TEST_CLASS(GamePlay)
@@ -130,7 +131,7 @@ namespace UnitTest
 			Assert::IsTrue(Board(e) == Board(n->successors[n->choice]->current));
 		}
 		void resetVisited(GameTreeNode* n) {
-			n->score = 9999;
+			n->score = SCHAR_MAX;
 			for (int i = 0; i < n->successorCount; i++) {
 				resetVisited(n->successors[i]);
 			}
