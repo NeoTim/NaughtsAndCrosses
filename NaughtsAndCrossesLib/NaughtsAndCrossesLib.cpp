@@ -89,12 +89,25 @@ GameTreeNode::GameTreeNode(ShortBoard board)
 }
 
 unsigned int nodesSerialised = 0;
+GameTreeNode* GameTreeNode::bestSuccessor(const XO player)
+{
+	char best = player == XO::O ? 20 : -20;
+	unsigned char iBest;
+	for (unsigned char i = 0; i < successorCount; ++i) {
+		char s = successors[i]->score;
+		if (player == XO::O && s < best || player == XO::X && s > best) {
+			iBest = i;
+			best = s;
+		}
+	}
+	return successors[iBest];
+}
 bool GameTreeNode::operator==(const GameTreeNode & other) const
 {
 	if (current != other.current) {
 		return false;
 	}
-	if (choice != other.choice) {
+	if (score != other.score) {
 		return false;
 	}
 	if (successorCount != other.successorCount) {
@@ -114,8 +127,8 @@ void GameTreeNode::serialize(std::ostream& os, std::set<ShortBoard>& visited)
 	nodesSerialised++;
 	visited.insert(current);
 	serializeShortBoard(os, current);
+	os << score;
 	os << successorCount;
-	os << choice;
 	for (unsigned char i = 0; i < successorCount; ++i) {
 		serializeShortBoard(os, successors[i]->current);
 	}
@@ -130,10 +143,10 @@ void GameTreeNode::serialize(std::ostream& os, std::set<ShortBoard>& visited)
 unsigned int GameTreeNode::deserialize(std::ifstream& is, NodeMap& nodemap)
 {
 	unsigned int bytesRead = 4; // first board and length
+	is.read(&score, 1);
 	char x;
 	is.read(&x, 1);
 	successorCount = static_cast<unsigned char>(x);
-	is.read(&choice, 1);
 	successors = new GameTreeNode*[successorCount];
 	for (unsigned char i = 0; i < successorCount; ++i) {
 		ShortBoard b = deserializeShortBoard(is);
@@ -242,15 +255,15 @@ char calculateScore(GameTreeNode *node, XO player)
 	if (endGame(node)) {
 		return node->score = 0;
 	}
-	char i, score, best = player == XO::O ? 20 : -20;
+	char i, choice, score, best = player == XO::O ? 20 : -20;
 	for (i = 0; i < node->successorCount; ++i) {
 		score = calculateScore(node->successors[i], nextPlayer);
 		if (player == XO::O && score < best || player == XO::X && score > best) {
-			node->choice = i;
+			choice = i;
 			best = node->successors[i]->score;
 		}
 	}
-	return node->score = node->successors[node->choice]->score;
+	return node->score = node->successors[choice]->score;
 }
 
 NAUGHTSANDCROSSESLIB_API Bytes boardToBytes(ShortBoard board)

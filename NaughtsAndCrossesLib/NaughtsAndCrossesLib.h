@@ -40,8 +40,8 @@ public:
 	ShortBoard current;
 	GameTreeNode** successors;
 	unsigned char successorCount;
+	GameTreeNode* bestSuccessor(const XO player);
 	char score;
-	char choice;
 	bool operator==(const GameTreeNode& other) const;
 	bool operator!=(const GameTreeNode& other) const;
 	void serialize(std::ostream& os, std::set<ShortBoard>& visited);

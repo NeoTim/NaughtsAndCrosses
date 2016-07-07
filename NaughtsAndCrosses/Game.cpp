@@ -56,7 +56,7 @@ Game::Game()
 			s = gt.getNode(shortBoard(&b));
 		}
 		else {
-			s = s->successors[s->choice];
+			s = s->bestSuccessor(player);
 		}
 		showBoard(s->current);
 

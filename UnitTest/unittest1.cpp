@@ -87,7 +87,7 @@ namespace UnitTest
 			Board board = b;
 			ShortBoard s = shortBoard(board);
 			GameTreeNode *n = gt->getNode(s);
-			Board ne = n->successors[n->choice]->current;
+			Board ne = n->bestSuccessor(XO::X)->current;
 			XO e[][3] = {
 				{ XO::X, XO::E, XO::X },
 				{ XO::E, XO::O, XO::E },
@@ -105,7 +105,7 @@ namespace UnitTest
 			Board board(b);
 			ShortBoard s = shortBoard(&board);
 			GameTreeNode *n = gt->getNode(s);
-			Board ne = n->successors[n->choice]->current;
+			Board ne = n->bestSuccessor(XO::X)->current;
 			XO e[][3] = {
 				{ XO::X, XO::O, XO::X },
 				{ XO::O, XO::O, XO::X },
@@ -122,13 +122,14 @@ namespace UnitTest
 			};
 			Board board = b;
 			ShortBoard s = shortBoard(&board);
-			GameTreeNode *n = gt->getNode(s);
+			GameTreeNode* n = gt->getNode(s);
+			GameTreeNode* best = n->bestSuccessor(XO::X);
 			XO e[][3] = {
 				{ XO::X, XO::O, XO::X },
 				{ XO::E, XO::O, XO::E },
 				{ XO::O, XO::X, XO::E }
 			};
-			Assert::IsTrue(Board(e) == Board(n->successors[n->choice]->current));
+			Assert::IsTrue(Board(e) == Board(best->current));
 		}
 		void resetVisited(GameTreeNode* n) {
 			n->score = SCHAR_MAX;
@@ -145,15 +146,14 @@ namespace UnitTest
 			};
 			Board board = b;
 			ShortBoard s = shortBoard(&board);
-			GameTreeNode *n = gt->getNode(s);
-			resetVisited(n);
-			calculateScore(n, XO::X);
+			GameTreeNode* n = gt->getNode(s);
+			GameTreeNode* best = n->bestSuccessor(XO::X);
 			XO e[][3] = {
 				{ XO::O, XO::X, XO::O },
 				{ XO::O, XO::X, XO::E },
 				{ XO::E, XO::X, XO::E }
 			};
-			Assert::IsTrue(Board(e) == Board(n->successors[n->choice]->current));
+			Assert::IsTrue(Board(e) == Board(best->current));
 		}
 	};
 }
